@@ -17,7 +17,7 @@ Angular CLI (optional for development)
 ```
 
 ## Backend:
-1. 
+1. Clone the repo
     ```
     git clone https://github.com/J-Tajheria/codingAssessment.git
     ```
