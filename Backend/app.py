@@ -95,3 +95,36 @@ def randomDataGeneration():
         mycursor.close()
         connection.close()
 
+@app.route('/events', methods=['GET'])
+def get_events():
+    try:
+        connection = mysql.connector.connect(
+            user=configuration['user'],
+            password=configuration['password'],
+            host=configuration['host'],
+            database=configuration['database']
+        )
+        mycursor = connection.cursor()
+
+        # Extract data from DB
+        mycursor.execute("SELECT eventsName, status, created_at FROM eventsTable")
+        rows = mycursor.fetchall()
+
+        events = [
+            {"eventsName": row[0], "status": row[1], "created_at": row[2].strftime('%Y-%m-%d %H:%M:%S')}
+            for row in rows
+        ]
+
+        return jsonify(events)
+
+    except mysql.connector.Error as err:
+        return jsonify({"error": str(err)}), 500
+    
+    finally:
+        mycursor.close()
+        connection.close()
+
+if __name__ == '__main__':
+    randomDataGeneration()
+
+    app.run(debug=True)
