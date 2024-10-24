@@ -1,6 +1,10 @@
-from flask import Flask, jsonify
+"""
+This project contains the backend code written using Flask API,
+to set up the DB and the routing to communicate with the frontend.
+"""
 import random
 from datetime import datetime, timedelta
+from flask import Flask, request, jsonify
 import mysql.connector
 from mysql.connector import errorcode
 from flask_cors import CORS
@@ -8,6 +12,7 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app)
 
+# list of event names
 service_types = [
     "Contact Management",  "CryptoSync", "I/O Gateway", "Packet Forwarding", "TDA File Manager",
     "Cloud Storage", "Data Backup", "Email Hosting", "Project Management", "API Gateway",
@@ -23,8 +28,7 @@ service_types = [
     "Remote Backup", "Help Desk Support", "Digital Asset Management", "Data Warehousing"
 ]
 
-status = ["Active", "Pending", "Completed", "Failed", "Not Started"]
-
+# List of status'
 status = ["Active", "Pending", "Completed", "Failed", "Not Started"]
 
 # Current date time
@@ -39,7 +43,14 @@ configuration = {
     'database': 'mydatabase'
 }
 
-def randomDataGeneration():
+def random_data_generation():
+    """
+    Function which randomly generates data to be injected into the DB.
+
+    Args: No arguments are passed to function.
+
+    returns: A database with randomly generated data injected through SQL queries.
+    """
     try:
         connection = mysql.connector.connect(
             user=configuration['user'],
@@ -55,7 +66,7 @@ def randomDataGeneration():
         mycursor.execute(f"USE {configuration['database']}")
 
         #  Create Table in SQL
-        createTableQuery = '''
+        create_table_query = '''
             CREATE TABLE IF NOT EXISTS eventsTable (
             id INT AUTO_INCREMENT PRIMARY KEY,
             eventsName VARCHAR(100) NOT NULL,
@@ -64,22 +75,22 @@ def randomDataGeneration():
             )
         '''
 
-        mycursor.execute(createTableQuery)
+        mycursor.execute(create_table_query)
 
         print("Table checked/created successfully.")
 
         values = []
 
-        for _ in range(50):
-            serviceType = random.choice(service_types)
-            statusInjection = random.choice(status)
+        for _ in range(15):
+            service_type = random.choice(service_types)
+            status_injection = random.choice(status)
             random_seconds = random.randint(0, int((end_date - start_date).total_seconds()))
             random_timestamp = start_date + timedelta(seconds=random_seconds)
 
-            values.append((serviceType, statusInjection, random_timestamp,))
+            values.append((service_type, status_injection, random_timestamp,))
 
-        SQL_Statement = "INSERT INTO eventsTable (eventsName, status, created_at) VALUES (%s, %s, %s)"
-        mycursor.executemany(SQL_Statement, values)
+        sql_statement = "INSERT INTO eventsTable (eventsName, status, created_at) VALUES (%s, %s, %s)"
+        mycursor.executemany(sql_statement, values)
         connection.commit()
         print(mycursor.rowcount, "was inserted.")
 
@@ -97,6 +108,11 @@ def randomDataGeneration():
 
 @app.route('/events', methods=['GET'])
 def get_events():
+    """
+    Fetches all the data currently stored in the DB.
+
+    Returns: All the data currently stored in the DB.
+    """
     try:
         connection = mysql.connector.connect(
             user=configuration['user'],
@@ -107,11 +123,11 @@ def get_events():
         mycursor = connection.cursor()
 
         # Extract data from DB
-        mycursor.execute("SELECT eventsName, status, created_at FROM eventsTable")
+        mycursor.execute("SELECT id, eventsName, status, created_at FROM eventsTable")
         rows = mycursor.fetchall()
 
         events = [
-            {"eventsName": row[0], "status": row[1], "created_at": row[2].strftime('%Y-%m-%d %H:%M:%S')}
+            { "id": row[0], "eventsName": row[1], "status": row[2], "created_at": row[3].strftime('%Y-%m-%d %H:%M:%S')}
             for row in rows
         ]
 
@@ -119,12 +135,85 @@ def get_events():
 
     except mysql.connector.Error as err:
         return jsonify({"error": str(err)}), 500
-    
+
+    finally:
+        mycursor.close()
+        connection.close()
+
+@app.route('/events', methods=['POST'])
+def add_event():
+    """
+    Adds a new event to the events database
+
+    Args: It takes event name and status given through inputs by the user.
+
+    Returns: A success message
+    """
+    try:
+        connection = mysql.connector.connect(
+            user=configuration['user'],
+            password=configuration['password'],
+            host=configuration['host'],
+            database=configuration['database']
+        )
+        mycursor = connection.cursor()
+
+        # Get data from request
+        data = request.get_json()
+        event_name = data.get('eventsName')
+        event_status = data.get('status')
+        created_at = data.get('created_at', datetime.now())
+
+        # Extract data from DB
+        insertion_query = "INSERT INTO eventsTable (eventsName, status, created_at) VALUES (%s, %s, %s)"
+        mycursor.execute(insertion_query, (event_name, event_status, created_at ))
+        connection.commit()
+
+        return jsonify({"message": "Event successfully added.", "id": mycursor.lastrowid}), 201
+
+    except mysql.connector.Error as err:
+        return jsonify({"error": str(err)}), 500
+
+    finally:
+        mycursor.close()
+        connection.close()
+
+@app.route('/events/<int:event_id>', methods=['DELETE'])
+def delete_event(event_id):
+    """
+    Deletes an event from the events database
+
+    Args: It takes the id of the event selected to be deleted.
+
+    Returns: A success message that is has been deleted.
+    """
+    try:
+        connection = mysql.connector.connect(
+            user=configuration['user'],
+            password=configuration['password'],
+            host=configuration['host'],
+            database=configuration['database']
+        )
+        mycursor = connection.cursor()
+
+        # Extract data from DB
+        delete_query = "DELETE FROM eventsTable WHERE id = %s"
+        mycursor.execute(delete_query, (event_id, ))
+        connection.commit()
+
+        if mycursor.rowcount > 0:
+            return jsonify({"message": f"Event with ID {event_id} deleted successfully."}), 200
+        else:
+            return jsonify({"message": f"No event found with ID {event_id}."}), 404
+
+    except mysql.connector.Error as err:
+        return jsonify({"error": str(err)}), 500
+
     finally:
         mycursor.close()
         connection.close()
 
 if __name__ == '__main__':
-    randomDataGeneration()
+    random_data_generation()
 
     app.run(debug=True)
